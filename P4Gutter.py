@@ -9,8 +9,13 @@ P4_WORKSPACE = '.p4_workspace'
 P4 = {}
 P4_DIFF_HEADER = re.compile('^([0-9,]+)([cad])([0-9,]+)$')
 
+DEBUG_ENABLED = False
 
 # UTILITIES ------------------------------------------------------------------------------------------------------------------------
+def print_debug(msg):
+    if DEBUG_ENABLED:
+        print msg
+
 def path_is_root(path):
     if not os.path.isdir(path):
         return False
@@ -20,14 +25,20 @@ def path_is_root(path):
 def shell_run(args, env=None):
     if not os.path.isfile(args[0]):
         return '', 'executable "' + args[0] + '" not found.'
-    print(' '.join(args))
-    print(env)
+
+    # Ensure all values are byte strings (not unicode objects)
+    for k, v in env.iteritems():
+        env[k] = str(v)
+
+    print_debug(' '.join(args))
+    print_debug(env)
+
     startupinfo = None
     if os.name == 'nt':
         startupinfo = subprocess.STARTUPINFO()
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     process = subprocess.Popen(args, stdout=subprocess.PIPE, startupinfo=startupinfo, stderr=subprocess.PIPE, env=env)
-    return process.stdout.read().decode(encoding='UTF-8'), process.stderr.read().decode(encoding='UTF-8')
+    return process.stdout.read().decode('UTF-8'), process.stderr.read().decode('UTF-8')
 
 
 def p4_find_workspace(file_path):
@@ -53,11 +64,11 @@ def st3_view_on_disk(view):
 
 # EVENT LISTENER -------------------------------------------------------------------------------------------------------------------
 class P4GutterEventListener(sublime_plugin.EventListener):
-    def on_load_async(self, view):
+    def on_load(self, view):
         if st3_view_on_disk(view) and ('binary' in P4) and P4['binary']:
             view.window().run_command('p4_gutter_diff')
 
-    def on_post_save_async(self, view):
+    def on_post_save(self, view):
         if st3_view_on_disk(view) and ('binary' in P4) and P4['binary']:
             view.window().run_command('p4_gutter_diff')
 
@@ -65,7 +76,7 @@ class P4GutterEventListener(sublime_plugin.EventListener):
 # ANNOTATION -----------------------------------------------------------------------------------------------------------------------
 class P4AnnotationCommand(sublime_plugin.WindowCommand):
     def run(self):
-        print('P4Annotation')
+        print_debug('P4Annotation')
         self.view = self.window.active_view()
         if not self.view:
             sublime.set_timeout(self.run, 1)
@@ -119,7 +130,6 @@ class P4AnnotationCommand(sublime_plugin.WindowCommand):
 
         return output, cl_unique
 
-
     def annotate_sub_2(self, environment, annotation, change_lists):
         # find CL owners
         who_pattern = re.compile('^Change [0-9]+ by ([^@]+)@')
@@ -165,13 +175,13 @@ class P4GutterDiffCommand(sublime_plugin.WindowCommand):
             return
         additions, deletions_above, deletions_below, modifications = self.run_diff(workspace)
         self.view.add_regions('p4gutter_addition', additions, 'markup.inserted',
-                              'Packages/P4Gutter/icons/addition.png', sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE)
+                              'dot', sublime.HIDDEN)
         self.view.add_regions('p4gutter_deletion_above', deletions_above, 'markup.deleted',
-                              'Packages/P4Gutter/icons/deletion_above.png', sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE)
+                              'bookmark', sublime.HIDDEN)
         self.view.add_regions('p4gutter_deletion_below', deletions_below, 'markup.deleted',
-                              'Packages/P4Gutter/icons/deletion_below.png', sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE)
+                              'bookmark', sublime.HIDDEN)
         self.view.add_regions('p4gutter_modification', modifications, 'markup.changed',
-                              'Packages/P4Gutter/icons/modification.png', sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE)
+                              'bookmark', sublime.HIDDEN)
 
     def run_diff(self, workspace):
         if not P4['enabled']:
@@ -183,7 +193,7 @@ class P4GutterDiffCommand(sublime_plugin.WindowCommand):
         out, err = shell_run([P4['binary'], 'diff', '-dl', self.view.file_name()], environment)
         if len(err) and not len(out):
             if P4['errorlog']:
-                print('P4Gutter Error: "{}".'.format(err[:-1]).replace('\r', '').replace('\n', ' > '))
+                print('P4Gutter Error: "%s".' % err.replace('\n', '').replace('\r', ''))
             return [], [], [], []
 
         additions, deletions_above, deletions_below, modifications = [], [], [], []
@@ -196,7 +206,7 @@ class P4GutterDiffCommand(sublime_plugin.WindowCommand):
             diff_type, diff_begin = header.group(2), header.group(3)
             comma = diff_begin.find(',')
             if comma > -1:
-                diff_end = diff_begin[comma+1:]
+                diff_end = diff_begin[comma + 1:]
                 diff_begin = diff_begin[0:comma]
             else:
                 diff_end = diff_begin
@@ -229,3 +239,5 @@ def plugin_loaded():
     P4['settings'] = sublime.load_settings('P4Gutter.sublime-settings')
     P4['settings'].add_on_change('p4gutter-reload', p4gutter_reload_settings)
     p4gutter_reload_settings()
+
+plugin_loaded()

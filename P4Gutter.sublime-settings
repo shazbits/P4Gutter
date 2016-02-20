@@ -1,6 +1,6 @@
 {
     // Add path to your Perforce command line binary here.
-    // Usually "/usr/bin/p4" for OSX.
+    // Usually "/usr/bin/p4" for OSX, or "C:\\Program Files\\Perforce\\p4.exe" on Windows
     "binary": "/usr/bin/p4",
 
     // Perforce user name.
